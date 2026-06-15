@@ -1,105 +1,244 @@
-#+TITLE:    mu4e-send-delay: Schedule send emails
+#+title: mu4e-send-delay: Schedule send emails
 
 * Description
 
-Delay sending mail by a desired amount of time. Similar to Gmail's “schedule send” feature, which sends emails after a designated amount of time, rather than immediately. This was repo is fork of the original, [[https://github.com/bennyandresen/mu4e-send-delay][bennyandresen/mu4e-send-delay]], which was forked from [[https://github.com/benmaughan/mu4e-delay][benmaughen's mu4e-delay]].
+Delay sending mail by a desired amount of time. Similar to Gmail's
+"schedule send" feature, which sends emails after a designated amount
+of time, rather than immediately. This repo is a fork of
+[[https://github.com/krisbalintona/mu4e-send-delay][krisbalintona/mu4e-send-delay]], which is itself a fork of the original
+[[https://github.com/bennyandresen/mu4e-send-delay][bennyandresen/mu4e-send-delay]], which was forked from
+[[https://github.com/benmaughan/mu4e-delay][benmaughan's mu4e-delay]].
 
-This fork has several notable differences from the original. They are listed below:
-1. Refactored code. Works with the latest versions of =mu4e= and is more hackable.
-2. Several default values changed to be more sensible.
-3. Addressed several undesirable interactions users may come across.
-4. Has explicit support for [[https://github.com/jeremy-compostella/org-msg][Org-msg]].
+This fork updates the package for compatibility with recent versions
+of ~mu~ and Emacs, and significantly extends the [[https://github.com/jeremy-compostella/org-msg][Org-msg]] integration,
+including support for [[https://github.com/benmaughan/org-msg-forward-mu4e][forwarding messages composed with Org-msg's
+inline HTML]].
 
-*Be aware that this fork has not been thoroughly tested yet, and bugs may be present.* I advise that users do limited testing on their configuration (e.g. sending emails to themselves) prior to actual use.
+Notable differences from krisbalintona's fork:
+
+1. Tested and working with ~mu~ 1.12.13 and Emacs 30.2.
+2. Org-msg replies now correctly preserve the quoted HTML of the
+   original message when the reply is delayed — previously this
+   could be lost between scheduling and sending.
+3. Org-msg *forwards* with inline HTML are now supported when
+   delayed, not just replies.
+4. ~C-c C-c~ in an Org-msg compose buffer now delays the message by
+   default (saving it as a draft), with ~C-u C-c C-c~ sending
+   immediately — overriding ~org-msg-ctrl-c-ctrl-c~ directly rather
+   than relying on a remapped key, so it works regardless of how
+   Org-msg's keymap is set up.
+5. The delay-header parsing and "is this due" checks have been made
+   more robust against malformed or partially-written headers.
+6. Cleans up any preserved reply/forward HTML temp files once a
+   delayed message is successfully sent or sent immediately.
+
+*Be aware that this fork has not been thoroughly tested in all
+configurations.* I advise limited testing on your own configuration
+(e.g. sending emails to yourself) prior to relying on it.
 
 ** Features
 
-+ =mu4e= context support
-+ Saves scheduled mails to =mu4e-drafts-folder=
-+ Uses an Emacs timer to check if delayed mail is scheduled to be sent now
-+ Allows easy edit of the “X-Delay” header in =mu4e-compose-mode=
-+ Displays scheduled time in =mu4e-view=
-+ Doesn't send if mail is currently being edited
-+ Works with attachments
+- ~mu4e~ context support
+- Saves scheduled mails to ~mu4e-drafts-folder~
+- Uses an Emacs timer to check if delayed mail is scheduled to be sent
+  now
+- Allows easy edit of the "X-Delay" header in ~mu4e-compose-mode~
+- Displays scheduled time in ~mu4e-headers~ and ~mu4e-view~
+- Doesn't send if the mail is currently open in a buffer being edited
+- Works with attachments
+- Full Org-msg support, including HTML replies and forwards
 
 * Install
 
 ** Requirements
 
-- Has only been tested on Emacs 24.5 and later
-- With [[https://github.com/djcb/mu-releases][mu 0.9.16]]
+- Tested on Emacs 30.2
+- Tested with ~mu~ 1.12.13
+- Optional: [[https://github.com/jeremy-compostella/org-msg][Org-msg]], if you want HTML compose/reply/forward support
 
 ** Manual
 
-Put =mu4e-send-delay.el= into a directory in you load-path and require it.
+Put ~mu4e-send-delay.el~ into a directory in your load-path and require
+it.
+
 #+begin_src emacs-lisp
-  (add-to-list 'load-path "path/to/directory") ; that contains mu4e-send-delay.el
-  (require 'mu4e-send-delay)
+(add-to-list 'load-path "path/to/directory") ; that contains mu4e-send-delay.el
+(require 'mu4e-send-delay)
 #+end_src
 
 ** Straight.el
 
-To install this fork, provide a special recipe to =straight=:
 #+begin_src emacs-lisp
-  (use-package mu4e-send-delay
-    :straight (:type git :host github :repo "krisbalintona/mu4e-send-delay")
-    :hook (mu4e-main-mode . mu4e-send-delay-setup)) ; or similar hooks
+(use-package mu4e-send-delay
+  :straight (:type git :host github :repo "benmaughan/mu4e-send-delay")
+  :hook (mu4e-main-mode . mu4e-send-delay-setup)) ; or similar hooks
 #+end_src
 
 ** Elpaca
 
-Do the same with =elpaca=:
 #+begin_src emacs-lisp
-  (use-package mu4e-send-delay
-    :elpaca (:type git :host github :repo "krisbalintona/mu4e-send-delay")
-    :hook (mu4e-main-mode . mu4e-send-delay-setup)) ; or similar hooks
+(use-package mu4e-send-delay
+  :elpaca (:type git :host github :repo "benmaughan/mu4e-send-delay")
+  :hook (mu4e-main-mode . mu4e-send-delay-setup)) ; or similar hooks
 #+end_src
 
 * Setup
 
-Simply run the =mu4e-send-delay-setup=, either manually or through a hook. This command
-1. sets up a timer to check if a delayed email should be sent (see =mu4e-send-delay-timer=)
-2. automatically inserts the “X-Delay” header to emails (see =mu4e-send-delay-header=)
+Simply run ~mu4e-send-delay-setup~, either manually or through a hook
+(e.g. ~mu4e-main-mode-hook~). This function is idempotent — calling it
+more than once has no additional effect, so it's safe to put on a
+hook that may fire multiple times in a session.
 
-Finally,
-=mu4e-send-delay-send-and-exit=
+Running it:
 
-:general ([remap message-send-and-exit] 'mu4e-send-delay-send-and-exit)
+1. Starts a background timer that periodically checks for due
+   delayed drafts (see ~mu4e-send-delay-timer~).
+2. Registers a custom "X-Delay" column so the scheduled send time is
+   visible in ~mu4e-headers-mode~ and ~mu4e-view-mode~.
+3. If ~mu4e-send-delay-enable-org-msg~ is non-nil, installs the
+   Org-msg integration (see below).
 
 * How it works
 
-This package adds a “X-Delay” header (see =mu4e-send-delay-header=) to emails. The value of this header is the amount of time after the user “sends” this email that this email should actually be sent. /For acceptable values,/ read the docstring of =mu4e-send-delay-parse-delay-header-string=.
+This package adds an "X-Delay" header (see
+~mu4e-send-delay-header~) to emails. The value of this header is an
+RFC 2822 date string giving the time at which the email should
+actually be sent. For accepted input formats when setting the header,
+see the docstring of ~mu4e-send-delay-parse-delay-header-string~ —
+briefly:
 
-The user must call the =mu4e-send-delay-send-and-exit= command in an =mu4e-compose= buffer for their email to be delayed. If called with a prefix argument, the email is sent immediately, with no delay, via =message-send-and-exit=.
+- ~<number><unit>~ — an offset from now, e.g. ~10m~, ~2h~, ~3d~, ~1w~,
+  ~2M~, ~1Y~ (minutes, hours, days, weeks, months, years)
+- ~YYYY-MM-DD~ — a specific date; the message is sent at
+  ~mu4e-send-delay-default-hour~ on that day
+- ~HH:MM~ — a specific time today, or tomorrow if that time has
+  already passed
 
-Emails whose emails are delayed are saved as drafts in the =mu4e-drafts-folder=. Once =mu4e-send-delay-send-due-timer= is run, then all delayed emails are sent. Users can manually send delayed emails by running the command =mu4e-send-delay-send-due=.
+Call ~mu4e-send-delay-send-and-exit~ in an ~mu4e-compose~ buffer to
+delay the current message (saved as a draft for later sending). With
+a prefix argument (~C-u~), the message is sent immediately via
+~message-send-and-exit~ instead, with the X-Delay header stripped.
+
+Delayed emails are saved as drafts in ~mu4e-drafts-folder~. The
+background timer (~mu4e-send-delay-send-due-timer~) periodically
+scans the drafts folder and sends any message whose X-Delay time has
+passed. You can also trigger this manually with
+~mu4e-send-delay-send-due~.
 
 * Configuration
 
 ** Keybinds
 
-The command =mu4e-send-delay-send-and-exit= is responsible for initiating =mu4e-send-delay='s functionality. Therefore, users should bind it to a key. The best option is to remap =message-send-and-exit=, the command bound to =C-c C-c= in =mu4e-compose-map= and =message-mode-map=.
-#+BEGIN_SRC emacs-lisp
-  (define-key mu4e-compose-mode-map [remap message-send-and-exit] 'mu4e-send-delay-send-and-exit)
-#+END_SRC
+Bind ~mu4e-send-delay-send-and-exit~ in place of ~message-send-and-exit~,
+which is normally on ~C-c C-c~ in ~mu4e-compose-mode-map~ and
+~message-mode-map~:
 
-** =Org-msg=
+#+begin_src emacs-lisp
+(define-key mu4e-compose-mode-map [remap message-send-and-exit]
+            'mu4e-send-delay-send-and-exit)
+#+end_src
 
-This package is compatible with [[https://github.com/jeremy-compostella/org-msg][Org-msg]]. The only configuration necessary is setting =mu4e-send-delay-enable-org-msg= to a non-nil value.
+A common pattern is to bind delaying explicitly to its own key, e.g.:
 
-Be aware that if =mu4e-send-delay-enable-org-msg= is non-nil =mu4e-send-delay= overrides =org-msg-ctrl-c-ctrl-c=. Look at =mu4e-message-send-delay-org-msg-ctrl-c-ctrl-c= to see what is done.
+#+begin_src emacs-lisp
+(defun my/mu4e-send-delay ()
+  (interactive)
+  (mu4e-send-delay-send-and-exit t))
+
+(add-hook 'mu4e-compose-mode-hook
+          (lambda ()
+            (define-key mu4e-compose-mode-map (kbd "C-c C-l")
+                        #'my/mu4e-send-delay)))
+#+end_src
+
+** Org-msg
+
+[[https://github.com/jeremy-compostella/org-msg][Org-msg]] support is enabled by setting ~mu4e-send-delay-enable-org-msg~
+to a non-nil value before (or when re-running) ~mu4e-send-delay-setup~.
+
+#+begin_src emacs-lisp
+(setq mu4e-send-delay-enable-org-msg t)
+#+end_src
+
+When enabled, this package installs an ~:override~ advice on
+~org-msg-ctrl-c-ctrl-c~ (via
+~mu4e-send-delay-org-msg-ctrl-c-ctrl-c~), changing the behaviour of
+~C-c C-c~ in an Org-msg compose buffer:
+
+| Keys         | Behaviour                                          |
+|--------------+-----------------------------------------------------|
+| ~C-c C-c~    | Delay the message (saved as a draft for later sending) |
+| ~C-u C-c C-c~ | Send immediately, bypassing the delay              |
+
+*** HTML replies and forwards
+
+A key difference from earlier forks: when an Org-msg reply or forward
+includes quoted HTML from the original message (via Org-msg's
+~:reply-to~ mechanism), that HTML is normally held in a *temporary
+file* that is deleted as soon as the compose buffer is killed. This
+is fine for an immediate send, but breaks delayed sends — by the time
+the background timer fires, the temp file (and the quoted content it
+held) is gone.
+
+This package solves that by, at the moment a message is delayed:
+
+1. Detecting whether the compose buffer is an Org-msg draft (by the
+   presence of its ~#+OPTIONS:~ header line).
+2. Locating the temporary reply/forward HTML file via Org-msg's
+   ~:reply-to~ property.
+3. Copying that HTML file to a stable location next to the saved
+   draft (named ~<draft>-reply-to.html~), and rewriting the
+   ~:reply-to~ property in the saved draft to point at this stable
+   copy.
+
+When the timer later finds the draft is due, it re-opens the file,
+activates ~org-msg-edit-mode~ (which now finds the preserved HTML via
+the rewritten ~:reply-to~ property), and runs Org-msg's normal
+send/conversion pipeline. This means delayed Org-msg replies *and
+forwards* are sent with the original message's HTML correctly
+embedded inline, exactly as if you had sent immediately.
+
+Once a delayed message is successfully sent (or sent immediately),
+the preserved ~-reply-to.html~ file is deleted automatically.
+
+This fork is compatible with the [[https://github.com/benmaughan/org-msg-forward-mu4e][org-msg workaround]] that fixes
+forwarding of html emails not appearing correctly in MS Outlook
+clients.
 
 ** Variables
 
-+ =mu4e-send-delay-default-delay= is the default value for the “X-Delay” header
-+ =mu4e-send-delay-timer= is the interval in which =mu4e-send-delay-send-due-timer= is run
-+ =mu4e-send-delay-include-header-in-draft= controls whether the delay header is added during composition or right before the user sends the email (with =mu4e-send-delay-send-and-exit=)
-+ =mu4e-send-strip-header-before-send= controls whether to remove the header once sent so that it does not appear in recipients' copy of the email
+- ~mu4e-send-delay-header~ — the header name used to store the
+  scheduled send time (default ~"X-Delay"~)
+- ~mu4e-send-delay-default-delay~ — the default delay applied when no
+  explicit value is set (default ~"10m"~)
+- ~mu4e-send-delay-default-hour~ — hour of day used for date-only
+  delays, e.g. ~"2026-06-15"~ (default ~7~)
+- ~mu4e-send-delay-timer~ — interval in seconds between checks for due
+  messages (default ~120~)
+- ~mu4e-send-delay-include-header-in-draft~ — whether the X-Delay
+  header is pre-populated in new drafts (default ~t~)
+- ~mu4e-send-delay-strip-header-before-send~ — whether to remove the
+  X-Delay header before the message is actually sent, so recipients
+  don't see it (default ~t~)
+- ~mu4e-send-delay-enable-org-msg~ — enable Org-msg integration,
+  described above (default ~nil~)
 
-* Particularies
+* Particularities
 
-Right now the sent buffer will be re-encoded to utf-8, to avoid mml.el complaining upon a scheduled sent. If you notice your mails arriving garbled despite looking okay in the Drafts, please consider the following emacs options:
-#+begin_src emacs-lisp
+- The draft buffer is re-encoded to UTF-8 before sending to avoid
+  ~mml.el~ complaining on scheduled sends. If mail arrives garbled
+  despite looking fine in Drafts, also consider:
+
+  #+begin_src emacs-lisp
   (prefer-coding-system 'utf-8)
   (set-language-environment "UTF-8")
-#+end_src
+  #+end_src
+
+- If you use Gmail, set ~mu4e-sent-messages-behavior~ to ~trash~ or
+  ~delete~ rather than ~sent~, to avoid duplicate entries in your Sent
+  folder (Gmail automatically files outgoing mail there).
+
+- A draft that is currently open in a buffer is skipped by the
+  background timer to avoid interfering with active editing — it will
+  be sent on a subsequent timer run once the buffer is closed, if it
+  is still due.
